@@ -23,6 +23,10 @@ if /i "%profile%"=="8gb" goto :profile_8gb
 if /i "%profile%"=="low-end" goto :profile_low
 if /i "%profile%"=="balanced" goto :profile_low
 goto :profile_common
+rem Ray tracing off by default (set VICTORY_BVH_BUILDER=1 before launching to re-enable).
+if not defined VICTORY_BVH_BUILDER set "VICTORY_BVH_BUILDER=0"
+if not defined VICTORY_RT_RESOLVE set "VICTORY_RT_RESOLVE=0"
+if not defined VICTORY_ACTIVATE_RAYS set "VICTORY_ACTIVATE_RAYS=0"
 
 :profile_low
 rem Balanced for low-end/mid-range gaming PCs (6-8 GB VRAM, 16 GB RAM, 4-8 core CPU).
