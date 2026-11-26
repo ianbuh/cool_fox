@@ -1698,7 +1698,7 @@ pub(crate) fn room(memory: Option<[u64; 4]>) -> bool {
         // used.
         Some([budget, used, ..]) => {
             used.saturating_sub(crate::pool::texture_room()) + crate::shadow::card_room_kept() + targets_room_kept()
-                < budget / 100 * room_percent()
+                < budget / 100 * room_percent_for(budget)
         }
         None => filled < WITHOUT_BUDGET,
     }
@@ -1784,6 +1784,21 @@ pub(crate) fn room_lately() -> bool {
 /// 1 MiB up take 449 MB more of the card than before (941 against 492),
 /// and 94 gives the textures about that much back.
 #[cfg(windows)]
+fn room_percent_for(budget: u64) -> u64 {
+    const GIB: u64 = 1 << 30;
+    // Smaller cards stop queueing host textures earlier (more stay in system
+    // RAM until needed) unless VICTORY_TEXTURE_ROOM_PERCENT says otherwise.
+    if std::env::var_os("VICTORY_TEXTURE_ROOM_PERCENT").is_some() {
+        room_percent()
+    } else if budget > 0 && budget <= 6 * GIB {
+        72
+    } else if budget > 0 && budget <= 9 * GIB {
+        82
+    } else {
+        room_percent()
+    }
+}
+
 fn room_percent() -> u64 {
     static PERCENT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *PERCENT.get_or_init(|| {
