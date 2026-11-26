@@ -501,7 +501,13 @@ pub(crate) fn retire_resource(object: ID3D12Resource) {
 fn bury_lag() -> u64 {
     static LAG: OnceLock<u64> = OnceLock::new();
     *LAG.get_or_init(|| {
-        let default = if crate::residency::limited_host_ram() { 16 } else { 64 };
+        let default = if crate::residency::low_host_ram() {
+            8
+        } else if crate::residency::limited_host_ram() {
+            16
+        } else {
+            64
+        };
         std::env::var("VICTORY_BURY_LAG").ok().and_then(|v| v.parse().ok()).unwrap_or(default)
     })
 }
@@ -920,7 +926,12 @@ fn create() -> windows::core::Result<Host> {
         // stopped (run 54, 08:32:01 to 08:32:06). Left as it is by default:
         // whether the card is slower with the shaders it then keeps is not
         // known.
-        if std::env::var_os("VICTORY_D3D12_BACKGROUND").is_some_and(|v| v == "0")
+        let disable_bg = match std::env::var("VICTORY_D3D12_BACKGROUND").ok().as_deref().map(str::trim) {
+            Some("0") => true,
+            Some("1") => false,
+            _ => std::thread::available_parallelism().is_ok_and(|n| n.get() <= 16),
+        };
+        if disable_bg
             && let Ok(device6) = device.cast::<ID3D12Device6>()
         {
             let set = device6.SetBackgroundProcessingMode(

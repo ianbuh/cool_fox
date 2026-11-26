@@ -56,6 +56,8 @@ pub(crate) fn room(memory: Option<[u64; 4]>) {
             0
         } else if pressure {
             1
+        } else if crate::residency::low_host_ram() {
+            limit.min(2)
         } else {
             limit
         };

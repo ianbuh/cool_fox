@@ -1,4 +1,4 @@
-﻿//! Host-memory admission for speculative texture work and reusable upload storage.
+//! Host-memory admission for speculative texture work and reusable upload storage.
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
@@ -95,6 +95,13 @@ pub(crate) fn limited_host_ram() -> bool {
     *LIMITED.get_or_init(|| memory_status().is_some_and(|s| s.ullTotalPhys <= 32 * GIB))
 }
 
+/// True on hosts with 16 GiB or less of physical RAM, where tighter upload
+/// staging and retirement budgets prevent pagefile thrashing.
+pub(crate) fn low_host_ram() -> bool {
+    static LOW: OnceLock<bool> = OnceLock::new();
+    *LOW.get_or_init(|| memory_status().is_some_and(|s| s.ullTotalPhys <= 16 * GIB))
+}
+
 fn next_pressure(was: bool, physical: u64, commit: u64) -> bool {
     if was {
         physical < 5 * GIB || commit < 6 * GIB
@@ -148,9 +155,23 @@ pub(crate) fn critical_commit() -> bool {
 
 /// A soft per-frame admission limit. A single texture can cross it. The
 /// queue retains unserved slots so they can be retried on later frames.
+#[cfg(test)]
 pub(crate) fn prefetch_limit(bytes: u64, pressure: bool, critical: bool, limited: bool, staging: u64) -> u64 {
+    prefetch_limit_for(bytes, pressure, critical, limited, false, staging)
+}
+
+pub(crate) fn prefetch_limit_for(
+    bytes: u64,
+    pressure: bool,
+    critical: bool,
+    limited: bool,
+    low_ram: bool,
+    staging: u64,
+) -> u64 {
     if critical {
         bytes.min(16 << 20)
+    } else if low_ram && (pressure || staging >= 512 * MIB) {
+        bytes.min(32 << 20)
     } else if pressure || (limited && staging >= GIB) {
         bytes.min(64 << 20)
     } else {
@@ -197,5 +218,8 @@ mod tests {
         assert_eq!(prefetch_limit(512 << 20, true, false, false, 0), 64 << 20);
         assert_eq!(prefetch_limit(512 << 20, true, true, false, 0), 16 << 20);
         assert_eq!(prefetch_limit(192 << 20, false, false, false, 0), 192 << 20);
+        assert_eq!(prefetch_limit_for(512 << 20, false, false, true, true, 512 * MIB), 32 << 20);
+        assert_eq!(prefetch_limit_for(512 << 20, true, false, true, true, 0), 32 << 20);
+        assert_eq!(prefetch_limit_for(512 << 20, true, true, true, true, 0), 16 << 20);
     }
 }

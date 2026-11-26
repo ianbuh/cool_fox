@@ -2525,7 +2525,9 @@ impl State {
             Some(mb) => mb << 20,
             None => {
                 let base = staging_budget_per_frame(memory.map(|[budget, ..]| budget));
-                if crate::residency::limited_host_ram() {
+                if crate::residency::low_host_ram() {
+                    base.min(64 << 20)
+                } else if crate::residency::limited_host_ram() {
                     base.min(128 << 20)
                 } else {
                     base
@@ -2625,8 +2627,13 @@ impl State {
         // 1.6-2.2 s of each of the world's first twenty frames (run 20).
         // The rest waits for the next frames, as it does past the bytes.
         static SPAN_MS: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+        let low_vram = memory.is_some_and(|[budget, ..]| budget > 0 && budget <= 9 << 30);
+        let default_span_ms = if low_vram || crate::residency::low_host_ram() { 80 } else { 250 };
         let span = std::time::Duration::from_millis(*SPAN_MS.get_or_init(|| {
-            std::env::var("VICTORY_TEXTURE_STAGE_MS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(250)
+            std::env::var("VICTORY_TEXTURE_STAGE_MS")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(default_span_ms)
         }));
         // A backlog (a scene's first minutes: 22,000 slots due, 2-3 minutes of black
         // surfaces at 192 MB a frame) gets three times the bytes and the time until it
@@ -2634,7 +2641,7 @@ impl State {
         static CATCHUP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         let catchup = *CATCHUP.get_or_init(|| std::env::var_os("VICTORY_TEXTURE_CATCHUP").is_none_or(|v| v != "0"));
         let (per_frame, span) = if catchup && on_time >= 1024 {
-            let mult = if memory.is_some_and(|[budget, ..]| budget > 0 && budget <= 9 << 30) { 2 } else { 3 };
+            let mult = if low_vram || crate::residency::low_host_ram() { 2 } else { 3 };
             (per_frame * mult, span * mult as u32)
         } else {
             (per_frame, span)
@@ -2653,11 +2660,12 @@ impl State {
         let bytes_at_most = if required || asked.is_some() {
             bytes_at_most
         } else {
-            crate::residency::prefetch_limit(
+            crate::residency::prefetch_limit_for(
                 bytes_at_most,
                 crate::residency::pressured(),
                 crate::residency::critical_commit(),
                 crate::residency::limited_host_ram(),
+                crate::residency::low_host_ram(),
                 crate::texture::live_staging_bytes(),
             )
         };

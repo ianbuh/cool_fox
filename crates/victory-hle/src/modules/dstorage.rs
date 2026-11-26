@@ -629,12 +629,23 @@ fn scheduler() -> Option<&'static Scheduler> {
         })
         .as_ref()?;
     STARTED.call_once(|| {
-        let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
+        let workers = std::thread::available_parallelism()
+            .map_or(4, |n| (n.get() / 2).clamp(2, 8));
         let started = (0..workers)
             .filter(|i| {
                 std::thread::Builder::new()
                     .name(format!("dstorage {i}"))
-                    .spawn(|| work(scheduler))
+                    .spawn(|| {
+                        // Keep disk/decompression bursts below the game's render and submit threads.
+                        // SAFETY: a plain priority call on our own worker thread.
+                        unsafe {
+                            use windows_sys::Win32::System::Threading::{
+                                GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL,
+                            };
+                            let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+                        }
+                        work(scheduler);
+                    })
                     .is_ok()
             })
             .count();
