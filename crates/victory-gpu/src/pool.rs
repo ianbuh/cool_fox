@@ -75,7 +75,11 @@ fn spares(memory: Option<[u64; 4]>, keep: bool) -> usize {
     let Some([budget, used, ..]) = memory else {
         return SPARE;
     };
-    if budget > 0 && budget <= 9 * GIB {
+    if budget > 0 && budget <= 6 * GIB {
+        // Low-end cards: never more than one empty block.
+        let _ = (keep, used);
+        1
+    } else if budget > 0 && budget <= 9 * GIB {
         if keep && u128::from(used) * 100 < u128::from(budget) * 80 {
             SPARE_KEPT_8GB
         } else {
@@ -110,6 +114,7 @@ pub(crate) fn on() -> bool {
 
 fn default_ripe_blocks(vram_budget: Option<u64>) -> usize {
     match vram_budget {
+        Some(budget) if budget > 0 && budget <= 6 * GIB => 1,
         Some(budget) if budget > 0 && budget <= 9 * GIB => 2,
         Some(budget) if budget > 0 && budget <= 12 * GIB => 4,
         _ => 12,

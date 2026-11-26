@@ -184,7 +184,9 @@ fn default_card_limits_mb(local_vram_budget: Option<u64>) -> (u64, u64) {
     const NINE_GIB_MB: u64 = 9 * 1024;
     const TWELVE_GIB_MB: u64 = 12 * 1024;
     const TWENTY_GIB_MB: u64 = 20 * 1024;
-    if budget_mb <= NINE_GIB_MB {
+    if budget_mb <= 6 * 1024 {
+        (16, 192)
+    } else if budget_mb <= NINE_GIB_MB {
         (16, 384)
     } else if budget_mb <= TWELVE_GIB_MB {
         (16, 512)

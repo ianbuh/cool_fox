@@ -160,7 +160,14 @@ pub(crate) fn vram_keep(budget: u64, used: u64) -> (u64, u64) {
     let share = |percent: u64| budget / 100 * percent;
     // 8 GB cards (~7.0-7.5 GiB WDDM budget) have a thin margin before WDDM
     // demotes hot render targets into shared RAM over PCIe; trim earlier.
-    let (soft, hard, target) = if budget <= 9 * GIB { (80, 88, 75) } else { (88, 95, 85) };
+    // <= 6 GiB budgets (low-end cards, or ones the system shares) trim earlier still.
+    let (soft, hard, target) = if budget <= 6 * GIB {
+        (65, 80, 60)
+    } else if budget <= 9 * GIB {
+        (80, 88, 75)
+    } else {
+        (88, 95, 85)
+    };
     if used < share(soft) {
         (KEPT_MS, u64::MAX)
     } else if used < share(hard) {

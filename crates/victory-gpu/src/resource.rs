@@ -1726,6 +1726,9 @@ fn default_targets_room_bytes(vram_budget: Option<u64>, series_s: bool) -> u64 {
     const GIB: u64 = 1 << 30;
     const MIB: u64 = 1 << 20;
     match vram_budget {
+        Some(budget) if budget > 0 && budget <= 6 * GIB => {
+            if series_s { 1024 * MIB } else { 1280 * MIB }
+        }
         Some(budget) if budget > 0 && budget <= 9 * GIB => {
             if series_s { 1536 * MIB } else { 2048 * MIB }
         }
