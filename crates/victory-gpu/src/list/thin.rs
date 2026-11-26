@@ -300,7 +300,7 @@ fn back_list(kind: u32) -> This {
 }
 
 fn default_thin_threads(logical_cpus: usize) -> usize {
-    (logical_cpus / 3).clamp(2, 8)
+    (logical_cpus / 2).clamp(2, 8)
 }
 
 fn start() {
@@ -922,9 +922,9 @@ mod tests {
     #[test]
     fn default_thin_threads_scales_with_cpu_count() {
         assert_eq!(default_thin_threads(4), 2);
-        assert_eq!(default_thin_threads(12), 4);
-        assert_eq!(default_thin_threads(16), 5);
+        assert_eq!(default_thin_threads(8), 4);
+        assert_eq!(default_thin_threads(12), 6);
+        assert_eq!(default_thin_threads(16), 8);
         assert_eq!(default_thin_threads(24), 8);
-        assert_eq!(default_thin_threads(32), 8);
     }
 }

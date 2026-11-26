@@ -478,7 +478,7 @@ fn worker_count(asked: Option<usize>, processors: usize) -> usize {
 fn worker_count_for(asked: Option<usize>, processors: usize, limited_ram: bool) -> usize {
     match asked {
         Some(n) => n.clamp(1, 64),
-        None if limited_ram => (processors / 3).clamp(2, 6),
+        None if limited_ram => (processors / 2).clamp(2, 8),
         None => (processors * 2 / 3).clamp(2, 16),
     }
 }
@@ -566,9 +566,9 @@ mod tests {
         assert_eq!(worker_count(None, 64), 16);
         assert_eq!(worker_count(Some(0), 24), 1);
         assert_eq!(worker_count(Some(20), 24), 20);
-        assert_eq!(worker_count_for(None, 8, true), 2);
-        assert_eq!(worker_count_for(None, 16, true), 5);
-        assert_eq!(worker_count_for(None, 24, true), 6);
+        assert_eq!(worker_count_for(None, 8, true), 4);
+        assert_eq!(worker_count_for(None, 16, true), 8);
+        assert_eq!(worker_count_for(None, 24, true), 8);
         assert_eq!(worker_count_for(Some(12), 8, true), 12);
     }
 
