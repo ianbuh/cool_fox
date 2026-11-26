@@ -23,6 +23,8 @@ if /i "%profile%"=="8gb" goto :profile_8gb
 if /i "%profile%"=="low-end" goto :profile_low
 if /i "%profile%"=="balanced" goto :profile_low
 goto :profile_common
+if not defined VICTORY_DISPLAY_MODE set "VICTORY_DISPLAY_MODE=1920x1080"
+if not defined VICTORY_WINDOW_MAX set "VICTORY_WINDOW_MAX=1920x1080"
 rem Ray tracing off by default (set VICTORY_BVH_BUILDER=1 before launching to re-enable).
 if not defined VICTORY_BVH_BUILDER set "VICTORY_BVH_BUILDER=0"
 if not defined VICTORY_RT_RESOLVE set "VICTORY_RT_RESOLVE=0"
