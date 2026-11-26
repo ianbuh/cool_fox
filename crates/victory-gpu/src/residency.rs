@@ -116,7 +116,12 @@ pub(crate) fn refresh() {
     let (physical, commit) = (status.ullAvailPhys, status.ullAvailPageFile);
     HEADROOM.store(physical.min(commit), Ordering::Relaxed);
     let was = pressured();
-    let pressure = next_pressure(was, physical, commit);
+    let mut pressure = next_pressure(was, physical, commit);
+    if low_host_ram() {
+        // 16 GB PCs start giving memory back sooner (enter at 4 GiB free,
+        // leave at 5.5) so Windows does not page the game out to disk.
+        pressure |= if was { physical < 11 * GIB / 2 } else { physical <= 4 * GIB };
+    }
     if pressure != was {
         PRESSURED.store(pressure, Ordering::Relaxed);
         if pressure {

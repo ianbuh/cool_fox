@@ -2,8 +2,8 @@
 setlocal EnableExtensions DisableDelayedExpansion
 set "profile=%~1"
 if "%profile%"=="" set "profile=pareto-residency"
-if /i not "%profile%"=="pareto-residency" if /i not "%profile%"=="rtx-3060ti" if /i not "%profile%"=="8gb" if /i not "%profile%"=="low-end" if /i not "%profile%"=="balanced" if /i not "%profile%"=="quality" (
-  echo Usage: Play-VIctory.cmd [pareto-residency ^| rtx-3060ti ^| 8gb ^| low-end ^| balanced ^| quality] 1>&2
+if /i not "%profile%"=="pareto-residency" if /i not "%profile%"=="rtx-3060ti" if /i not "%profile%"=="8gb" if /i not "%profile%"=="low-end" if /i not "%profile%"=="balanced" if /i not "%profile%"=="quality" if /i not "%profile%"=="rtx-2060" (
+  echo Usage: Play-VIctory.cmd [pareto-residency ^| rtx-3060ti ^| 8gb ^| low-end ^| balanced ^| quality ^| rtx-2060] 1>&2
   exit /b 2
 )
 if not defined VICTORY_GAME_DIR set "VICTORY_GAME_DIR=%~dp0..\GTA6.Xbox.v1.0.2.1"
@@ -17,6 +17,7 @@ if not exist "%runner%" (
   echo Extract the Windows release or run cargo build --release --locked -p victory. 1>&2
   exit /b 2
 )
+if /i "%profile%"=="rtx-2060" goto :profile_2060
 if /i "%profile%"=="quality" goto :profile_quality
 if /i "%profile%"=="rtx-3060ti" goto :profile_8gb
 if /i "%profile%"=="8gb" goto :profile_8gb
@@ -40,6 +41,22 @@ if not defined VICTORY_LEVELS_MIN_KB set "VICTORY_LEVELS_MIN_KB=256"
 if not defined VICTORY_CARD_ROOM_FOR_TARGETS_MB set "VICTORY_CARD_ROOM_FOR_TARGETS_MB=1536"
 if not defined VICTORY_CARD_BUFFERS_MB set "VICTORY_CARD_BUFFERS_MB=256"
 if not defined VICTORY_TEXTURE_STAGE_MB set "VICTORY_TEXTURE_STAGE_MB=64"
+if not defined VICTORY_TEXTURE_STAGE_MS set "VICTORY_TEXTURE_STAGE_MS=80"
+if not defined VICTORY_BURY_LAG set "VICTORY_BURY_LAG=8"
+if not defined VICTORY_D3D12_BACKGROUND set "VICTORY_D3D12_BACKGROUND=0"
+goto :profile_common
+
+:profile_2060
+rem RTX 2060 (6 GB VRAM) + 16 GB RAM: hard cap on VRAM-bound title textures, early RAM give-back, 1080p.
+if not defined VICTORY_THIN_THREADS set "VICTORY_THIN_THREADS=6"
+if not defined VICTORY_JOIN_PARTS set "VICTORY_JOIN_PARTS=6"
+if not defined VICTORY_PIPELINE_WORKERS set "VICTORY_PIPELINE_WORKERS=6"
+if not defined VICTORY_RIPE_BLOCKS set "VICTORY_RIPE_BLOCKS=1"
+if not defined VICTORY_LEVELS_MIN_KB set "VICTORY_LEVELS_MIN_KB=256"
+if not defined VICTORY_CARD_ROOM_FOR_TARGETS_MB set "VICTORY_CARD_ROOM_FOR_TARGETS_MB=1024"
+if not defined VICTORY_CARD_BUFFERS_MB set "VICTORY_CARD_BUFFERS_MB=192"
+if not defined VICTORY_TEXTURE_BUDGET_MB set "VICTORY_TEXTURE_BUDGET_MB=2560"
+if not defined VICTORY_TEXTURE_STAGE_MB set "VICTORY_TEXTURE_STAGE_MB=48"
 if not defined VICTORY_TEXTURE_STAGE_MS set "VICTORY_TEXTURE_STAGE_MS=80"
 if not defined VICTORY_BURY_LAG set "VICTORY_BURY_LAG=8"
 if not defined VICTORY_D3D12_BACKGROUND set "VICTORY_D3D12_BACKGROUND=0"

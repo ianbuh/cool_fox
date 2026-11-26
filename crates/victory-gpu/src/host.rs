@@ -402,9 +402,10 @@ fn ram_idle_for(avail_phys: Option<u64>, keep: bool) -> u64 {
     let Some(avail) = avail_phys else {
         return NORMAL_MS;
     };
-    if avail < 2 * GIB {
+    let low = crate::residency::low_host_ram();
+    if avail < if low { 3 * GIB } else { 2 * GIB } {
         HIGH_MS
-    } else if avail < 4 * GIB {
+    } else if avail < if low { 6 * GIB } else { 4 * GIB } {
         MODERATE_MS
     } else {
         NORMAL_MS
