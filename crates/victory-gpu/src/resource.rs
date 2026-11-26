@@ -1687,6 +1687,17 @@ pub(crate) fn room(memory: Option<[u64; 4]>) -> bool {
     if let Some(limit) = limit {
         return filled < limit;
     }
+    // 6 GB cards (no launcher profile needed, e.g. under Mandyhub): a hard
+    // cap on the title's VRAM textures unless VICTORY_TEXTURE_BUDGET_MB says
+    // otherwise. Shaders and texture quality are not touched.
+    if let Some([budget, ..]) = memory
+        && budget > 0
+        && budget <= 6 * (1 << 30)
+        && filled >= texture_floor_bytes(Some(budget))
+        && filled >= 2560 << 20
+    {
+        return false;
+    }
     let floor = texture_floor_bytes(memory.map(|[budget, ..]| budget));
     if filled < floor {
         return true;
