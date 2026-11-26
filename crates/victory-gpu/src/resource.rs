@@ -1721,15 +1721,34 @@ pub(crate) fn room(memory: Option<[u64; 4]>) -> bool {
 /// 238), and the queue was refused from the first world frame on. With
 /// their room kept, the queue stops that much earlier while the world
 /// loads and gets it back as the targets are made.
+#[cfg(any(windows, test))]
+fn default_targets_room_bytes(vram_budget: Option<u64>, series_s: bool) -> u64 {
+    const GIB: u64 = 1 << 30;
+    const MIB: u64 = 1 << 20;
+    match vram_budget {
+        Some(budget) if budget > 0 && budget <= 9 * GIB => {
+            if series_s { 1536 * MIB } else { 2048 * MIB }
+        }
+        Some(budget) if budget > 0 && budget <= 12 * GIB => {
+            if series_s { 2048 * MIB } else { 2560 * MIB }
+        }
+        _ => 3072 * MIB,
+    }
+}
+
 #[cfg(windows)]
 pub(crate) fn targets_room_kept() -> u64 {
     use std::sync::atomic::Ordering::Relaxed;
     static MOST: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     let most = *MOST.get_or_init(|| {
+        let default = default_targets_room_bytes(
+            crate::host::host().and_then(|h| h.video_memory()).map(|[b, ..]| b),
+            crate::console::current() == crate::console::Console::SeriesS,
+        );
         std::env::var("VICTORY_CARD_ROOM_FOR_TARGETS_MB")
             .ok()
             .and_then(|v| v.trim().parse::<u64>().ok())
-            .map_or(3072 << 20, |mb| mb.min(8192) << 20)
+            .map_or(default, |mb| mb.min(8192) << 20)
     });
     // Every host texture's bytes less those of the copies the title fills.
     let targets = HOST_TEXTURES[1].load(Relaxed).saturating_sub(KINDS[1].load(Relaxed));
@@ -4543,6 +4562,18 @@ float4 lit() : SV_Target { return 1.0; }
         assert_eq!(texture_floor_bytes(Some(12 * GIB)), 2 * GIB);
         assert_eq!(texture_floor_bytes(Some(24 * GIB)), 2 * GIB);
         assert_eq!(texture_floor_bytes(Some(32 * GIB)), 2 * GIB);
+    }
+
+    #[test]
+    fn targets_room_scales_with_vram_and_console() {
+        const GIB: u64 = 1 << 30;
+        const MIB: u64 = 1 << 20;
+        assert_eq!(default_targets_room_bytes(Some(7 * GIB), true), 1536 * MIB);
+        assert_eq!(default_targets_room_bytes(Some(7 * GIB), false), 2048 * MIB);
+        assert_eq!(default_targets_room_bytes(Some(11 * GIB), true), 2048 * MIB);
+        assert_eq!(default_targets_room_bytes(Some(11 * GIB), false), 2560 * MIB);
+        assert_eq!(default_targets_room_bytes(Some(24 * GIB), true), 3072 * MIB);
+        assert_eq!(default_targets_room_bytes(None, true), 3072 * MIB);
     }
 
     /// A placed texture viewed from a later level has a host copy of that

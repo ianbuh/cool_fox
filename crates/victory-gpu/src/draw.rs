@@ -2633,7 +2633,12 @@ impl State {
         // drains; `VICTORY_TEXTURE_CATCHUP=0` keeps the plain budget.
         static CATCHUP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         let catchup = *CATCHUP.get_or_init(|| std::env::var_os("VICTORY_TEXTURE_CATCHUP").is_none_or(|v| v != "0"));
-        let (per_frame, span) = if catchup && on_time >= 1024 { (per_frame * 3, span * 3) } else { (per_frame, span) };
+        let (per_frame, span) = if catchup && on_time >= 1024 {
+            let mult = if memory.is_some_and(|[budget, ..]| budget > 0 && budget <= 9 << 30) { 2 } else { 3 };
+            (per_frame * mult, span * mult as u32)
+        } else {
+            (per_frame, span)
+        };
         // A run made early (`State::early_textures`) has a budget of its
         // own: its bytes on top of what the frame has spent so far.
         // (Not `most`: that is the longest wait between looks, used below.)
@@ -4866,7 +4871,7 @@ fn staging_budget_per_frame(vram_budget: Option<u64>) -> u64 {
     const GIB: u64 = 1 << 30;
     const MIB: u64 = 1 << 20;
     match vram_budget {
-        Some(budget) if budget <= 6 * GIB => 96 * MIB,
+        Some(budget) if budget <= 9 * GIB => 96 * MIB,
         Some(budget) if budget >= 20 * GIB => 384 * MIB,
         Some(budget) if budget > 12 * GIB => 256 * MIB,
         _ => 192 * MIB,
@@ -4884,7 +4889,8 @@ mod tests {
         assert_eq!(staging_budget_per_frame(None), 192 * MIB);
         assert_eq!(staging_budget_per_frame(Some(4 * GIB)), 96 * MIB);
         assert_eq!(staging_budget_per_frame(Some(6 * GIB)), 96 * MIB);
-        assert_eq!(staging_budget_per_frame(Some(8 * GIB)), 192 * MIB);
+        assert_eq!(staging_budget_per_frame(Some(7 * GIB)), 96 * MIB);
+        assert_eq!(staging_budget_per_frame(Some(8 * GIB)), 96 * MIB);
         assert_eq!(staging_budget_per_frame(Some(12 * GIB)), 192 * MIB);
         assert_eq!(staging_budget_per_frame(Some(13 * GIB)), 256 * MIB);
         assert_eq!(staging_budget_per_frame(Some(14 * GIB)), 256 * MIB);

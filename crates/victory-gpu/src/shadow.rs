@@ -181,9 +181,12 @@ fn default_card_limits_mb(local_vram_budget: Option<u64>) -> (u64, u64) {
         return (16, 512);
     };
     let budget_mb = budget_bytes >> 20;
+    const NINE_GIB_MB: u64 = 9 * 1024;
     const TWELVE_GIB_MB: u64 = 12 * 1024;
     const TWENTY_GIB_MB: u64 = 20 * 1024;
-    if budget_mb <= TWELVE_GIB_MB {
+    if budget_mb <= NINE_GIB_MB {
+        (16, 384)
+    } else if budget_mb <= TWELVE_GIB_MB {
         (16, 512)
     } else if budget_mb < TWENTY_GIB_MB {
         (4, 2048)
@@ -5434,9 +5437,10 @@ mod window_tests {
         const GIB: u64 = 1 << 30;
         const MIB: u64 = 1 << 20;
 
-        // Unknown (WARP / query failure) and <= 12 GiB keep the 12 GB baseline.
+        // Unknown (WARP / query failure) keeps the 12 GB baseline; <= 9 GiB uses the 8 GB tier.
         assert_eq!(default_card_limits_mb(None), (16, 512));
-        assert_eq!(default_card_limits_mb(Some(8 * GIB)), (16, 512));
+        assert_eq!(default_card_limits_mb(Some(7 * GIB)), (16, 384));
+        assert_eq!(default_card_limits_mb(Some(8 * GIB)), (16, 384));
         assert_eq!(default_card_limits_mb(Some(11 * GIB)), (16, 512));
         assert_eq!(default_card_limits_mb(Some(12 * GIB)), (16, 512));
 

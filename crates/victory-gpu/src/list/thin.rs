@@ -299,8 +299,17 @@ fn back_list(kind: u32) -> This {
     list
 }
 
+fn default_thin_threads(logical_cpus: usize) -> usize {
+    (logical_cpus / 3).clamp(2, 8)
+}
+
 fn start() {
-    let threads = std::env::var("VICTORY_THIN_THREADS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(8usize).clamp(1, 32);
+    let default = default_thin_threads(std::thread::available_parallelism().map_or(8, |n| n.get()));
+    let threads = std::env::var("VICTORY_THIN_THREADS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(default)
+        .clamp(1, 32);
     for i in 0..threads {
         let worker = move || {
             crate::cores::keep_many_on_fast_cores("victory-list");
@@ -908,5 +917,14 @@ mod tests {
         slot[1] = 99;
         assert_eq!(kept[1], 2);
         assert_eq!(record(0), [0; RECORD]);
+    }
+
+    #[test]
+    fn default_thin_threads_scales_with_cpu_count() {
+        assert_eq!(default_thin_threads(4), 2);
+        assert_eq!(default_thin_threads(12), 4);
+        assert_eq!(default_thin_threads(16), 5);
+        assert_eq!(default_thin_threads(24), 8);
+        assert_eq!(default_thin_threads(32), 8);
     }
 }

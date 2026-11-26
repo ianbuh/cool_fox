@@ -150,6 +150,7 @@ pub(crate) fn available_physical_ram() -> Option<u64> {
 /// on: 61,000 of them in the first 300 s of session play-1125-0203, at 78 to
 /// 80 %, of which 13,000 were made and uploaded again.)
 pub(crate) fn vram_keep(budget: u64, used: u64) -> (u64, u64) {
+    const GIB: u64 = 1 << 30;
     const KEPT_MS: u64 = 600_000;
     const IDLE_MS: u64 = 5_000;
     const SHORT_MS: u64 = 1_500;
@@ -157,12 +158,15 @@ pub(crate) fn vram_keep(budget: u64, used: u64) -> (u64, u64) {
         return (IDLE_MS, u64::MAX);
     }
     let share = |percent: u64| budget / 100 * percent;
-    if used < share(88) {
+    // 8 GB cards (~7.0-7.5 GiB WDDM budget) have a thin margin before WDDM
+    // demotes hot render targets into shared RAM over PCIe; trim earlier.
+    let (soft, hard, target) = if budget <= 9 * GIB { (80, 88, 75) } else { (88, 95, 85) };
+    if used < share(soft) {
         (KEPT_MS, u64::MAX)
-    } else if used < share(95) {
-        (IDLE_MS, used - share(85))
+    } else if used < share(hard) {
+        (IDLE_MS, used - share(target))
     } else {
-        (SHORT_MS, used - share(85))
+        (SHORT_MS, used - share(target))
     }
 }
 
@@ -10654,6 +10658,11 @@ mod batch {   // Batch::texture_due lives here; `mod tests` is already taken at 
         let (ms, bytes) = vram_keep(100 * gib, 90 * gib);
         assert_eq!((ms, bytes), (5_000, 5 * gib));
         assert_eq!(vram_keep(100 * gib, 120 * gib), (1_500, 35 * gib));
+        // 8 GB cards (~7-8 GiB budget): trim earlier (80 % / 88 % -> 75 %).
+        let budget = 8 * gib;
+        assert_eq!(vram_keep(budget, budget / 100 * 79).0, 600_000);
+        assert_eq!(vram_keep(budget, budget / 100 * 82), (5_000, budget / 100 * 82 - budget / 100 * 75));
+        assert_eq!(vram_keep(budget, budget / 100 * 90), (1_500, budget / 100 * 90 - budget / 100 * 75));
         assert_eq!(vram_keep(0, 7).0, 5_000);
     }
 

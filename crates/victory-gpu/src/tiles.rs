@@ -71,19 +71,30 @@ const HEAP_TILES: u32 = 1024;
 /// no heap could be had); uploads recorded again for such a level.
 pub(crate) static STATS: [AtomicU64; 11] = [const { AtomicU64::new(0) }; 11];
 
-/// Whether textures are made this way: the switch
-/// (`VICTORY_LEVELS_ON_DEMAND=1`; off by default), and a card that reads
-/// zeros from, and drops writes to, levels without memory (tiled resources
-/// tier 2).
+fn wanted_for(setting: Option<&str>, vram_budget: Option<u64>) -> bool {
+    const NINE_GIB: u64 = 9 << 30;
+    match setting {
+        Some("1") => true,
+        Some("0") => false,
+        Some(_) => false,
+        None => vram_budget.is_some_and(|b| b > 0 && b <= NINE_GIB),
+    }
+}
+
+/// Whether textures are made this way: the switch (`VICTORY_LEVELS_ON_DEMAND`;
+/// auto-enabled on `<= 9 GiB` VRAM budgets when unset, `=0` to force off, `=1`
+/// to force on), and a card that reads zeros from, and drops writes to, levels
+/// without memory (tiled resources tier 2).
 pub(crate) fn wanted() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| {
-        if !std::env::var_os("VICTORY_LEVELS_ON_DEMAND").is_some_and(|v| v == "1") {
-            return false;
-        }
         let Some(host) = host() else {
             return false;
         };
+        let vram_budget = host.video_memory().map(|[budget, ..]| budget);
+        if !wanted_for(std::env::var("VICTORY_LEVELS_ON_DEMAND").ok().as_deref(), vram_budget) {
+            return false;
+        }
         let mut options = D3D12_FEATURE_DATA_D3D12_OPTIONS::default();
         // SAFETY: a plain query into a struct of its own size.
         let asked = unsafe {
@@ -99,25 +110,33 @@ pub(crate) fn wanted() -> bool {
             tier,
             on,
             floor_kb = floor() >> 10,
-            "host copies of title textures take the card's memory level by level (VICTORY_LEVELS_ON_DEMAND=1)"
+            "host copies of title textures take the card's memory level by level (VICTORY_LEVELS_ON_DEMAND)"
         );
         on
     })
 }
 
-fn parse_floor(value: Option<&str>) -> u64 {
+fn parse_floor_for(value: Option<&str>, vram_budget: Option<u64>) -> u64 {
+    const NINE_GIB: u64 = 9 << 30;
+    let default = if vram_budget.is_some_and(|b| b > 0 && b <= NINE_GIB) { 256 << 10 } else { 1 << 20 };
     value
         .and_then(|v| v.trim().parse::<u64>().ok())
-        .map_or(1 << 20, |kb| kb.max(64).saturating_mul(1024))
+        .map_or(default, |kb| kb.max(64).saturating_mul(1024))
 }
 
-/// The bytes from which a texture is made this way: a megabyte, or
-/// `VICTORY_LEVELS_MIN_KB`. (The accounting of run 189: the levels not
-/// held are 1.9 MB a copy on some 1,600 copies; a 512x512 texture has six
-/// tiles at most, and most of the calls for nothing.)
+#[cfg(test)]
+fn parse_floor(value: Option<&str>) -> u64 {
+    parse_floor_for(value, None)
+}
+
+/// The bytes from which a texture is made this way: a megabyte (256 KiB on
+/// `<= 9 GiB` VRAM budgets), or `VICTORY_LEVELS_MIN_KB`.
 pub(crate) fn floor() -> u64 {
     static BYTES: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    *BYTES.get_or_init(|| parse_floor(std::env::var("VICTORY_LEVELS_MIN_KB").ok().as_deref()))
+    *BYTES.get_or_init(|| {
+        let vram_budget = host().and_then(|h| h.video_memory()).map(|[budget, ..]| budget);
+        parse_floor_for(std::env::var("VICTORY_LEVELS_MIN_KB").ok().as_deref(), vram_budget)
+    })
 }
 
 /// The bytes of the tiles given to textures now: the card's memory they
@@ -1473,11 +1492,20 @@ void look() {
 
     #[test]
     fn floor_saturates_instead_of_wrapping() {
+        const GIB: u64 = 1 << 30;
         assert_eq!(parse_floor(None), 1 << 20);
+        assert_eq!(parse_floor_for(None, Some(7 * GIB)), 256 << 10);
+        assert_eq!(parse_floor_for(None, Some(12 * GIB)), 1 << 20);
+        assert_eq!(parse_floor_for(Some("512"), Some(7 * GIB)), 512 << 10);
         assert_eq!(parse_floor(Some("0")), 64 << 10);
         assert_eq!(parse_floor(Some("2048")), 2048 << 10);
         assert_eq!(parse_floor(Some(&(1u64 << 54).to_string())), u64::MAX);
         assert_eq!(parse_floor(Some(&u64::MAX.to_string())), u64::MAX);
+        assert!(wanted_for(None, Some(7 * GIB)));
+        assert!(!wanted_for(Some("0"), Some(7 * GIB)));
+        assert!(!wanted_for(None, Some(16 * GIB)));
+        assert!(wanted_for(Some("1"), Some(16 * GIB)));
+        assert!(!wanted_for(None, None));
     }
 
     #[test]

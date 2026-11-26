@@ -63,10 +63,32 @@ pub(crate) fn room(memory: Option<[u64; 4]>) {
     }
 }
 
+const GIB: u64 = 1 << 30;
+/// Empty blocks kept on 8 GB cards (<= 9 GiB local budget): 256 MiB while below 80 %.
+const SPARE_KEPT_8GB: usize = 4;
+/// Empty blocks kept on 10-12 GB cards (<= 12 GiB local budget): 768 MiB while below 85 %.
+const SPARE_KEPT_12GB: usize = 12;
+
 fn spares(memory: Option<[u64; 4]>, keep: bool) -> usize {
-    match memory {
-        Some([budget, used, ..]) if keep && u128::from(used) * 100 < u128::from(budget) * 85 => SPARE_KEPT,
-        _ => SPARE,
+    let Some([budget, used, ..]) = memory else {
+        return SPARE;
+    };
+    if budget > 0 && budget <= 9 * GIB {
+        if keep && u128::from(used) * 100 < u128::from(budget) * 80 {
+            SPARE_KEPT_8GB
+        } else {
+            1
+        }
+    } else if budget > 0 && budget <= 12 * GIB {
+        if keep && u128::from(used) * 100 < u128::from(budget) * 85 {
+            SPARE_KEPT_12GB
+        } else {
+            SPARE
+        }
+    } else if keep && u128::from(used) * 100 < u128::from(budget) * 85 {
+        SPARE_KEPT
+    } else {
+        SPARE
     }
 }
 
@@ -84,8 +106,17 @@ pub(crate) fn on() -> bool {
     *ON.get_or_init(|| std::env::var_os("VICTORY_TEXTURE_POOL").is_none_or(|v| v != "0"))
 }
 
+fn default_ripe_blocks(vram_budget: Option<u64>) -> usize {
+    match vram_budget {
+        Some(budget) if budget > 0 && budget <= 9 * GIB => 2,
+        Some(budget) if budget > 0 && budget <= 12 * GIB => 4,
+        _ => 12,
+    }
+}
+
 /// How many blocks of textures are made ahead, so that one has been there
-/// for a while when its first piece is taken (`VICTORY_RIPE_BLOCKS`, 12;
+/// for a while when its first piece is taken (`VICTORY_RIPE_BLOCKS`; default
+/// scales by VRAM budget: 2 on <= 9 GiB, 4 on <= 12 GiB, 12 above;
 /// 0: none, and new blocks are used at once, as before).
 ///
 /// A page fault of lists already on the card, in a texture made the same
@@ -98,7 +129,10 @@ pub(crate) fn on() -> bool {
 /// no such lists: pieces are cut from those first.
 fn ahead() -> usize {
     static AHEAD: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *AHEAD.get_or_init(|| std::env::var("VICTORY_RIPE_BLOCKS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(12))
+    *AHEAD.get_or_init(|| {
+        let default = default_ripe_blocks(crate::host::host().and_then(|h| h.video_memory()).map(|[b, ..]| b));
+        std::env::var("VICTORY_RIPE_BLOCKS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(default)
+    })
 }
 
 /// Submissions begun and finished ([`crate::host::submissions`]), and how
@@ -599,10 +633,20 @@ mod tests {
 
     #[test]
     fn empty_blocks_stay_while_the_card_has_room() {
-        assert_eq!(spares(Some([100, 84, 0, 0]), true), SPARE_KEPT);
-        assert_eq!(spares(Some([100, 85, 0, 0]), true), SPARE);
-        assert_eq!(spares(Some([100, 10, 0, 0]), false), SPARE);
+        assert_eq!(spares(Some([24 * GIB, 20 * GIB, 0, 0]), true), SPARE_KEPT);
+        assert_eq!(spares(Some([24 * GIB, 21 * GIB, 0, 0]), true), SPARE);
+        assert_eq!(spares(Some([24 * GIB, 2 * GIB, 0, 0]), false), SPARE);
+        assert_eq!(spares(Some([12 * GIB, 10 * GIB, 0, 0]), true), SPARE_KEPT_12GB);
+        assert_eq!(spares(Some([12 * GIB, 11 * GIB, 0, 0]), true), SPARE);
+        assert_eq!(spares(Some([7 * GIB, 5 * GIB, 0, 0]), true), SPARE_KEPT_8GB);
+        assert_eq!(spares(Some([7 * GIB, 6 * GIB, 0, 0]), true), 1);
+        assert_eq!(spares(Some([7 * GIB, 1 * GIB, 0, 0]), false), 1);
         assert_eq!(spares(None, true), SPARE);
+        assert_eq!(default_ripe_blocks(Some(7 * GIB)), 2);
+        assert_eq!(default_ripe_blocks(Some(8 * GIB)), 2);
+        assert_eq!(default_ripe_blocks(Some(11 * GIB)), 4);
+        assert_eq!(default_ripe_blocks(Some(24 * GIB)), 12);
+        assert_eq!(default_ripe_blocks(None), 12);
     }
 
     #[test]

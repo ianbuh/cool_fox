@@ -7,9 +7,11 @@ Download and extract the Windows x64 ZIP from the [private releases](https://git
 ```powershell
 $env:VICTORY_GAME_DIR = 'D:\Games\MyDump'
 .\Play-VIctory.cmd pareto-residency
+# For 8 GB VRAM GPUs + 8-core/16-thread CPUs (e.g. RTX 3060 Ti + Ryzen 7 5700X):
+.\Play-VIctory.cmd rtx-3060ti
 ```
 
-The launcher selects Series S and the RTX-tested residency settings. It builds its shader cache locally under `%LOCALAPPDATA%\VIctory\cache-pareto`. Set `VICTORY_CACHE_DIR` to reuse an existing cache outside the checkout. Windows x64, an AVX2 CPU, and a Direct3D 12 GPU with shader model 6.6 and mesh shader support are required.
+The launcher selects Series S and the RTX-tested residency settings. The `rtx-3060ti` (or `8gb`) profile tightens 8 GB VRAM reserves, enables 256 KiB tiled mip streaming (`VICTORY_LEVELS_ON_DEMAND=1`), bounds lookahead/staging blocks, and sizes worker threads for an 8-core/16-thread CPU. It builds its shader cache locally under `%LOCALAPPDATA%\VIctory\cache-pareto`. Set `VICTORY_CACHE_DIR` to reuse an existing cache outside the checkout. Windows x64, an AVX2 CPU, and a Direct3D 12 GPU with shader model 6.6 and mesh shader support are required.
 
 To build from this checkout, install the pinned Rust toolchain and the MSVC C++ build tools with a Windows SDK, then run `cargo build --release --locked -p victory`. The same launcher finds `target\release\victory.exe`. The sections below describe the upstream AMD fork and its separate launcher.
 
