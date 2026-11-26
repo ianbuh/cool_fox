@@ -27,7 +27,7 @@ const GLYPH: (u32, u32) = (5, 7);
 const CELL: (u32, u32) = (6, 9);
 /// Characters in a line, text lines, rim, and frametime graph height in dots.
 const COLUMNS: u32 = 34;
-const LINES: u32 = 6;
+const LINES: u32 = 7;
 const RIM: u32 = 4;
 const GRAPH_GAP: u32 = 3;
 const GRAPH_H: u32 = 24;
@@ -420,7 +420,10 @@ fn process_memory() -> (u64, u64) {
     (c.WorkingSetSize as u64, c.PagefileUsage as u64)
 }
 
-/// Builds the 6 RTSS-style HUD lines.
+/// The size of the picture the box is drawn onto (the swap chain's), set at each draw.
+static OUTPUT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Builds the 7 RTSS-style HUD lines.
 fn lines_for(c: &[f64; COUNTERS], ms: f64, worst: f64, low1_fps: f64, host: &Host) -> Vec<Line> {
     let gb = |bytes: u64| bytes as f64 / (1u64 << 30) as f64;
     let (working, private) = process_memory();
@@ -463,6 +466,20 @@ fn lines_for(c: &[f64; COUNTERS], ms: f64, worst: f64, low1_fps: f64, host: &Hos
             span("RAM    ", Tone::Label),
             span(format!("{:4.1} GB  ", gb(private)), Tone::Cyan),
             span(format!(" WS {:4.1} GB", gb(working)), Tone::Value),
+        ],
+        vec![
+            span("RES    ", Tone::Label),
+            span(
+                {
+                    let size = OUTPUT.load(Ordering::Relaxed);
+                    if size == 0 {
+                        "----".to_owned()
+                    } else {
+                        format!("{}X{}", size >> 32, size & 0xffff_ffff)
+                    }
+                },
+                Tone::Cyan,
+            ),
         ],
         vec![
             span("DRAWS  ", Tone::Label),
@@ -616,6 +633,7 @@ impl Panel {
         // Not the title's: the frame recorder leaves it out.
         #[cfg(feature = "diagnostics")]
         let _ours = crate::replay::record::unrecorded();
+        OUTPUT.store((u64::from(width) << 32) | u64::from(height), Ordering::Relaxed);
         let scale = scale(height);
         if self.buffers.as_ref().is_none_or(|b| (b.format, b.scale) != (format, scale)) {
             std::mem::forget(self.buffers.take());
